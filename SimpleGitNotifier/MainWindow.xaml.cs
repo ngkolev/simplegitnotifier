@@ -15,6 +15,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
 using Hardcodet.Wpf.TaskbarNotification;
+using Microsoft.Win32;
 
 namespace SimpleGitNotifier
 {
@@ -23,6 +24,10 @@ namespace SimpleGitNotifier
         public MainWindow()
         {
             InitializeComponent();
+
+            IsLocked = false;
+
+            SystemEvents.SessionSwitch += new SessionSwitchEventHandler(SystemEvents_SessionSwitch);
 
             Config = new Configuration();
             var dispatcherTimer = new System.Windows.Threading.DispatcherTimer();
@@ -33,18 +38,25 @@ namespace SimpleGitNotifier
         }
 
         private Configuration Config { get; set; }
+        private bool IsLocked { get; set; }
+
+
+        private void SystemEvents_SessionSwitch(object sender, Microsoft.Win32.SessionSwitchEventArgs e)
+        {
+            if (e.Reason == SessionSwitchReason.SessionLock)
+            {
+                IsLocked = true;
+            }
+            else if (e.Reason == SessionSwitchReason.SessionUnlock)
+            {
+                IsLocked = false;
+                DoFetch(); // On unlock I want to fetch the changes
+            }
+        }
 
         private void DispatcherTimerOnTick(object sender, EventArgs eventArgs)
         {
-            var dayOfWeek = DateTime.Now.DayOfWeek;
-            if (Config.WorkOnWeekends || (dayOfWeek != DayOfWeek.Saturday && dayOfWeek != DayOfWeek.Sunday))
-            {
-                var hour = DateTime.Now.Hour;
-                if (Config.DayStart <= hour && hour <= Config.DayEnd)
-                {
-                    DoFetch();
-                }
-            }
+            DoFetch();
         }
 
         private void Fetch_OnClick(object sender, RoutedEventArgs e)
@@ -59,6 +71,11 @@ namespace SimpleGitNotifier
 
         private void DoFetch(bool showToastIfNoResult = false)
         {
+            if (IsLocked)
+            {
+                return;
+            }
+
             lock (this)
             {
                 try
